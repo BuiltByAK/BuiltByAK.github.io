@@ -1,0 +1,150 @@
+/* ================================= */
+/* Global Styles and Light Mode      */
+/* ================================= */
+
+/* Default Light Mode Styles */
+body {
+  background-color: white;
+  color: black;
+  font-size: 16px;
+  line-height: 1.5;
+  transition: background-color 0.3s, color 0.3s; /* Smooth transitions */
+}
+
+header, footer {
+  background-color: transparent !important; /* Ensure transparency */
+  box-shadow: none; /* Remove shadows */
+  padding: 0;
+  text-align: center;
+}
+
+h1 {
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #f8f9fa; /* Light gray */
+  color: #333; /* Dark text */
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1); /* Optional shadow */
+}
+
+.navbar a {
+  margin: 0 10px;
+  font-size: 16px;
+  text-decoration: none;
+  color: #007bff; /* Link color */
+}
+
+.navbar a:hover {
+  color: #0056b3; /* Hover link color */
+}
+
+img {
+  max-width: 100%; /* Responsive images */
+  height: auto; /* Maintain aspect ratio */
+}
+
+.github-logo {
+  filter: none; /* Original logo color */
+}
+
+/* ================================= */
+/* Dark Mode Styles                  */
+/* ================================= */
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1e1e1e; /* Softer dark gray */
+    color: #e0e0e0; /* Light gray text */
+  }
+
+  header, footer {
+    background-color: #2a2a2a;
+  }
+
+  .navbar {
+    background-color: #2a2a2a;
+    color: #f1f1f1;
+    box-shadow: none; /* Flat design */
+  }
+
+  .navbar a {
+    color: #79baff; /* Muted blue for links */
+  }
+
+  .navbar a:hover {
+    color: #4da8ff; /* Brighter hover color */
+  }
+
+  .search-icon {
+    color: #f1f1f1;
+  }
+
+  .github-logo {
+    filter: invert(100%) brightness(200%); /* Makes logo white */
+  }
+
+  a {
+    color: #79baff; /* Softer blue for links */
+  }
+}
+
+/* ================================= */
+/* Responsive Design (Mobile)        */
+/* ================================= */
+
+@media (max-width: 768px) {
+  /* Navbar */
+  .navbar {
+    flex-direction: column; /* Stack links vertically */
+    align-items: flex-start;
+  }
+
+  .navbar a {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+
+  /* Body */
+  body {
+    font-size: 14px; /* Smaller font for small devices */
+    line-height: 1.4;
+  }
+
+  /* Titles and Text */
+  h1 {
+    font-size: 24px; /* Adjust heading size */
+  }
+
+  p {
+    font-size: 14px; /* Smaller paragraph text */
+  }
+
+  /* Footer */
+  footer {
+    padding: 5px;
+    font-size: 12px;
+  }
+}
+
+/* ================================= */
+/* Utility Classes                   */
+/* ================================= */
+
+.container {
+  width: 90%; /* Flexible width */
+  max-width: 1200px; /* Limit the max width */
+  margin: 0 auto; /* Center content */
+  padding: 10px;
+}
+
+/* Smooth Transitions */
+* {
+  transition: background-color 0.3s, color 0.3s; /* Global smooth transitions */
+}

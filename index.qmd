@@ -1,0 +1,48 @@
+---
+title: "Meet Austin Kaduk"
+---
+
+![](images/Headshot.jpg){fig-align="center" width="359"}
+
+Hi, I am Austin Kaduk, a fourth-year Finance student at the University of Alberta with a minor in Economics. Born and raised in Edmonton, Alberta, with family roots in Fort Smith, Northwest Territories, I bring a unique perspective shaped by my heritage and life experiences. My passion lies at the intersection of data science, statistical analysis, and finance, and I am continually enhancing my programming expertise in R and Python to unlock innovative solutions in the financial sector.
+
+I take immense pride in my connection to the Indigenous community, having been deeply involved through mentorship, leadership, and active participation in programs such as the First Peoples House and Braided Journeys. My work as an economics tutor has allowed me to assist and mentor other Indigenous students, fostering both academic success and a sense of empowerment.
+
+Beyond academics, I have developed a strong foundation in financial analysis and decision-making through hands-on roles, including a co-op internship as a Business Analyst with the City of Edmonton. My experiences have equipped me with the skills to apply strategic thinking, build impactful datasets, and craft automated workflows that streamline processes and improve outcomes.
+
+Creativity and strategic problem-solving define my approach to challenges. I am committed to promoting financial literacy and representation in underrepresented communities, ensuring that my work leaves a lasting positive impact. My vision is to bridge the gap between technical precision and human-centered solutions, excelling as a future CFA and banking professional while giving back to the community.
+
+I am always interested in connecting with like-minded individuals with a passion for growth and education. If you would like to connect, reach out to me via linkedin or email.
+
+```{=html}
+<div style="display: flex; gap: 10px; align-items: center;">
+  <!-- LinkedIn -->
+  <a href="https://www.linkedin.com/in/austin-kaduk-566735235/" target="_blank">
+    <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png" alt="LinkedIn" width="25" />
+  </a>
+
+  <!-- GitHub -->
+  <a href="https://github.com/BuiltByAK" target="_blank">
+    <img
+      src="https://cdn-icons-png.flaticon.com/512/25/25231.png"
+      alt="GitHub"
+      width="25"
+      class="github-logo" />
+  </a>
+
+  <!-- Email -->
+  <a href="mailto:kaduk@ualberta.ca">
+    <img src="https://cdn-icons-png.flaticon.com/512/732/732200.png" alt="Email" width="25" />
+  </a>
+</div>
+```
+
+```{=html}
+<footer style="text-align: center; margin-top: 20px; font-size: 14px; color: #666;">
+  &copy; <span id="year"></span>, Austin Kaduk
+</footer>
+
+<script>
+  document.getElementById("year").textContent = new Date().getFullYear();
+</script>
+```
