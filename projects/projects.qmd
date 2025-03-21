@@ -8,7 +8,7 @@ page-layout: article
 
 Here are some projects that I've worked on:
 
--   [NPV at Risk Analysis](projects/NPV_RISK_Analysis.qmd)\
--   [Fitness Assessment](projects/Assessing_fitness.qmd)\
--   [Fixed Income Analysis](projects/IR_risk_Analysis.qmd)
--   [General Capabilities](projects/exam.qmd)
+-   [NPV at Risk Analysis](NPV_RISK_Analysis.qmd)\
+-   [Fitness Assessment](Assessing_fitness.qmd)\
+-   [Fixed Income Analysis](IR_risk_Analysis.qmd)
+-   [General Capabilities](exam.qmd)
