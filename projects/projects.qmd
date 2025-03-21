@@ -1,0 +1,14 @@
+---
+title: "projects"
+format: html
+page-layout: article
+---
+
+#My projects
+
+Here are some projects that I've worked on:
+
+- [NPV at Risk Analysis](docs/NPV_RISK_Analysis.html)  
+- [Fitness Assessment](docs/assessing_fitness.html)  
+- [Fixed Income Analysis](docs/IR_risk_Analysis.html)
+- [General Capabilities](docs/exam.html)  
