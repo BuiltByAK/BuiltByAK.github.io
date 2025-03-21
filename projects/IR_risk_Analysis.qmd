@@ -1,0 +1,355 @@
+---
+title: "Practical IR Portfolio Sensitivities"
+subtitle: "Individual Project"
+date: "`r Sys.Date()`"
+author: "Philippe Cote"
+format: 
+  html:
+    theme: cyborg
+    embed-resources: true
+    page-layout: full
+    toc: true
+    toc-location: left
+    grid: 
+      margin-width: 200px
+      body-width: 1000px
+    css: style.css
+    resource: 
+      - "*.js"
+      - "*.mp3"
+editor: source
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+options(scipen=999) # eliminates scientific notation
+library(tidyverse)
+library(scales)
+library(gt)
+library(RTL)
+library(tidyquant)
+dd_grade = as.Date("2025-02-10")
+```
+
+# Description
+
+Imagine you are a portfolio manager at a fixed-income investment firm. Your primary responsibility is to manage interest rate risk across a diverse bond portfolio. You are tasked with analyzing how various interest rate movements impact your portfolio's value and using quantitative tools to estimate, visualize, and interpret these risks. Your goal is to provide insights that will help guide strategic decisions for hedging and optimizing the portfolio.
+
+As a Finance graduate, you will draw on the skills you have learned in fixed income valuation, and be expected to use current data for interest rates in the US Treasury market. You will need to round you the YTMs and Coupons of each bond to the last business day of the month prior to this assigment being given to you.
+
+# Objective
+
+You will recreate numerical sensitivities (Delta and Gamma) for specific bond positions and assess how changes in interest rates affect the portfolio's P&L. The focus will be on both individual bonds and the overall portfolio, with practical applications for risk management.
+
+# Exposure
+
+The bond positions you have are:
+
+1.  Long \$1,000,000 a 10-year bond with 3% coupon and an initial Yield To Maturity (YTM) of 3%.
+2.  Short \$500,000 a 2-year bond with 3% coupon and an initial YTM of 3%.
+3.  Short \$500,000 a 30-year bond with 3% coupon and an initial YTM of 3%.
+
+You may use the `RTL::bond()` pricing function.
+
+# Question 1 (9 points)
+
+-   Recreate the numerical sensitivities (delta/gamma PL est) for each portfolio positions.
+    -   All YTMs are semi-annual.
+    -   The step size for bonds is one basis point using the central difference method.
+-   Create plots showing:
+    -   The x-axis YTMs from zero to 6% and the y-axis showing the Bond Price
+    -   A line showing the delta approximation price
+    -   A line showing the actual price
+
+```{r}
+
+last_buis_day <- as.Date("2025-01-31")
+series = c("DGS2", "DGS10", "DGS30")
+
+
+treasury_data <- tq_get(series, get = "economic.data",
+                        from = last_buis_day, to = last_buis_day) %>%
+  dplyr::select(symbol, price) %>%
+  dplyr::rename(YTM = price)
+
+bond_positions <- dplyr::tibble(
+  bond_type = c("10-Year", "2-Year", "30-Year"),
+  position = c(1000000, -500000, -500000),
+  face_value = 100,
+  bond_count = position / face_value,
+  coupon = 0.03,
+  initial_ytm = 0.03,
+  t2m = c(10, 2, 30)
+) %>%
+  dplyr::mutate(ytm = c(0.0458,
+                         0.0422,
+                         0.0483)) %>%
+  dplyr::select(-position) %>%
+  dplyr::mutate(market_price = mapply(RTL::bond,
+                        ytm = ytm,
+                        C = coupon,
+                        T2M = t2m,
+                        m = 2,
+                        output = "price"))
+
+step_size <- 0.0001
+
+df <- bond_positions %>%
+  rowwise() %>%
+  mutate(yield_grid = list(round(seq(0, 0.0483 + 0.03, step_size), 4))) %>%
+  unnest(yield_grid) %>%
+  mutate(
+    price = mapply(RTL::bond, ytm = yield_grid, C = coupon, T2M = t2m, m = 2, output = "price"),
+    price_minus = mapply(RTL::bond, ytm = yield_grid - step_size, C = coupon, T2M = t2m, m = 2, output = "price"),
+    price_plus = mapply(RTL::bond, ytm = yield_grid + step_size, C = coupon, T2M = t2m, m = 2, output = "price")
+  )
+
+df <- df %>% 
+  dplyr::mutate(
+    delta = (price_plus - price_minus) / (2*step_size) / 10000,
+    gamma = 0.5 * ((price_plus - 2*price + price_minus) / step_size^2) / 10000^2
+  )
+
+df %>%
+  filter(yield_grid >= 0 & yield_grid <= 0.06) %>%
+  ggplot(aes(x = yield_grid, y = price, col = bond_type)) +
+  geom_line() +
+  labs(
+    title = "Bond Price vs YTM",
+    x = "Yield to Maturity (YTM)",
+    y = "Bond price"
+  ) +
+  geom_vline(xintercept = 0.03, colour = "red") +
+  geom_text(aes(x = 0.031, label = "Coupon Rate", y = 150),
+            colour = "red",
+            angle = 90)
+
+df_b1 <- df %>%
+  filter(bond_type == "10-Year")
+
+delta_local_b1 <- filter(df_b1, yield_grid == initial_ytm)$delta
+price_local_b1 <- filter(df_b1, yield_grid == initial_ytm)$price
+
+df_b1 <- df_b1 %>% mutate(
+  delta_approx = (price_local_b1 + delta_local_b1 * (yield_grid - initial_ytm) * 10000) * bond_count,
+  price = price*bond_count
+  )
+
+approx_actual_b1 <- df_b1 %>%
+  select(yield_grid, price, delta_approx) %>%
+  filter(yield_grid >= 0 & yield_grid <= 0.06) %>%
+  pivot_longer(-yield_grid, names_to = "series", values_to = "Value")
+
+approx_actual_b1 %>%
+  ggplot(aes(x = yield_grid, y = Value, col = series)) + geom_line() +
+  labs(
+    title = "10-year bond price vs YTM @ 3% YTM",
+    x = "YTM",
+    y = "Bond Price"
+  )
+
+df_b2 <- df %>%
+  filter(bond_type == "2-Year")
+
+delta_local_b2 <- filter(df_b2, yield_grid == initial_ytm)$delta
+price_local_b2 <- filter(df_b2, yield_grid == initial_ytm)$price
+
+df_b2 <- df_b2 %>% mutate(
+  delta_approx = (price_local_b2 + delta_local_b2 * (yield_grid - initial_ytm) * 10000)*bond_count,
+  price = price * bond_count)
+
+approx_actual_b2 <- df_b2 %>%
+  select(yield_grid, price, delta_approx) %>%
+  filter(yield_grid >= 0 & yield_grid <= 0.06) %>%
+  pivot_longer(-yield_grid, names_to = "series", values_to = "Value")
+
+approx_actual_b2 %>%
+  ggplot(aes(x = yield_grid, y = Value, col = series)) + geom_line() +
+  labs(
+    title = "2-year bond price vs YTM @ 3% YTM",
+    x = "YTM",
+    y = "Bond Price"
+  )
+
+df_b3 <- df %>%
+  filter(bond_type == "30-Year")
+
+delta_local_b3 <- filter(df_b3, yield_grid == initial_ytm)$delta
+price_local_b3 <- filter(df_b3, yield_grid == initial_ytm)$price
+
+df_b3 <- df_b3 %>% mutate(
+  delta_approx = (price_local_b3 + delta_local_b3 * (yield_grid - initial_ytm) * 10000)*bond_count,
+  price = price * bond_count)
+
+approx_actual_b3 <- df_b3 %>%
+  select(yield_grid, price, delta_approx) %>%
+  filter(yield_grid >= 0 & yield_grid <= 0.06) %>%
+  pivot_longer(-yield_grid, names_to = "series", values_to = "Value")
+
+approx_actual_b3 %>%
+  ggplot(aes(x = yield_grid, y = Value, col = series)) + geom_line() +
+  labs(
+    title = "30-year bond price vs YTM @ 3% YTM",
+    x = "YTM",
+    y = "Bond Price"
+  )
+
+df_combined <- rbind(df_b1, df_b2, df_b3)
+
+
+```
+
+# Question 2 (3 points)
+
+Now show a chart of portfolio change in price (y-axis) vs YTM (x-axis) for $\pm$ 3% change in YTM.
+
+```{r}
+
+change_df <- df_combined %>%
+  filter(yield_grid >= initial_ytm - 0.03 & yield_grid <= initial_ytm + 0.03) %>%
+  select(bond_type, yield_grid, initial_ytm, ytm, bond_count, price, delta_approx) %>%
+  group_by(yield_grid) %>%
+  summarise(portfolio_price = sum(price), .groups = "drop")
+
+port_price_local = filter(change_df, yield_grid == 0.03)$portfolio_price
+
+delta_local_b1_3 <- (filter(df_b1, yield_grid == initial_ytm)$delta)
+delta_local_b2_3 <- (filter(df_b2, yield_grid == initial_ytm)$delta)
+delta_local_b3_3 <- (filter(df_b3, yield_grid == initial_ytm)$delta)
+
+port_delta_local <- (delta_local_b1_3 * bond_positions$bond_count[1] +
+  delta_local_b2_3 * bond_positions$bond_count[2] +
+  delta_local_b3_3 * bond_positions$bond_count[3])
+
+change_df <- change_df %>%
+  mutate(portfolio_delta_approx = (port_price_local + port_delta_local *(yield_grid - 0.03))*10000) %>%
+  pivot_longer(-yield_grid, names_to = "series", values_to = "value")
+
+
+pv_ytm_vis <- change_df %>% ggplot(aes(x = yield_grid, y = value, col = series)) +
+  geom_line() +
+  labs(
+    title = "Portfolio Value vs YTM (+-3%)",
+    x = "YTM",
+    y = "Portfolio Value"
+  )
+
+pv_ytm_vis
+```
+
+# Question 3 (4 points)
+
+Show the initial delta (stepsize = 1 bp, central difference) of the portfolio.
+
+```{r}
+
+df_initial_delta <- df %>%
+  filter(yield_grid == initial_ytm) %>%
+  summarise(PortfolioDelta = sum(delta * bond_count)) 
+df_initial_delta %>% gt()
+
+```
+
+# Question 4 (8 points)
+
+Show a delta/gamma PL estimate vs actual PL when YTMs change as follows:
+
+-   10-year bond YTM up by 75 bps.
+-   2-year bond YTM up by 50 bps.
+-   30-year bond YTM up by 100 bps.
+
+```{r}
+ytm_shifts <- bond_positions %>%
+  mutate(ytm_change = c(0.0075, 0.0050, 0.0100),
+         new_ytm = initial_ytm + ytm_change,
+         new_price = mapply(RTL::bond, ytm = new_ytm, C = coupon, T2M = t2m, m = 2, output = "price"),
+         actual_PL = (new_price - face_value) * bond_count) %>%
+  select(bond_type, t2m, actual_PL)
+
+delta_P_0_b1 <- df_b1 %>%
+  filter(yield_grid == initial_ytm) %>%
+  select(delta)
+
+delta_Pplus1bp_b1 <- df_b1 %>%
+  filter(yield_grid == initial_ytm + step_size) %>%
+  select(delta)
+
+gamma_b1 <- abs(delta_Pplus1bp_b1 - delta_P_0_b1) %>% as.numeric(.)
+
+deltaPL_b1 = (delta_P_0_b1 * 75) * bond_positions$bond_count[1]
+gammaPL_b1 = (0.5 * gamma_b1 * (75)^2)* bond_positions$bond_count[1]
+
+delta_P_0_b2 <- df_b2 %>%
+  filter(yield_grid == initial_ytm) %>%
+  select(delta)
+
+delta_Pplus1bp_b2 <- df_b2 %>%
+  filter(yield_grid == initial_ytm + step_size) %>%
+  select(delta)
+
+gamma_b2 <- abs(delta_Pplus1bp_b2 - delta_P_0_b2) %>% as.numeric(.)
+
+deltaPL_b2 = (delta_P_0_b2 * 50) * bond_positions$bond_count[2]
+gammaPL_b2 = (0.5 * gamma_b2 * (50)^2)* bond_positions$bond_count[2]
+
+delta_P_0_b3 <- df_b3 %>%
+  filter(yield_grid == initial_ytm) %>%
+  select(delta)
+
+delta_Pplus1bp_b3 <- df_b3 %>%
+  filter(yield_grid == initial_ytm + step_size) %>%
+  select(delta)
+
+gamma_b3 <- abs(delta_Pplus1bp_b3 - delta_P_0_b3) %>% as.numeric(.)
+
+deltaPL_b3 = (delta_P_0_b3 * 100) * bond_positions$bond_count[3]
+gammaPL_b3 = (0.5 * gamma_b3 * (100)^2)* bond_positions$bond_count[3]
+
+pl_estimates <- tibble(
+  Bond = c(1, 2, 3),
+  Maturity = c(10, 2, 30),
+  ActualPL = ytm_shifts$actual_PL,
+  DeltaPL = c(deltaPL_b1, deltaPL_b2, deltaPL_b3) %>% as.numeric(.),
+  GammaPL = c(gammaPL_b1, gammaPL_b2, gammaPL_b3),
+  PLEst = DeltaPL + GammaPL,
+  PLUnattributed = ActualPL - PLEst)
+
+total_row <- pl_estimates %>%
+  summarise(
+    Bond = "Total",
+    Maturity = "", 
+    ActualPL = sum(ActualPL),
+    DeltaPL = sum(DeltaPL),
+    GammaPL = sum(GammaPL),
+    PLEst = sum(PLEst),
+    PLUnattributed = sum(PLUnattributed)
+  )
+
+pl_estimates <- rbind(pl_estimates, total_row)
+
+pl_estimates %>% gt::gt() %>%
+  fmt_currency(
+    columns = c(ActualPL, DeltaPL, GammaPL, PLEst, PLUnattributed),
+    currency = "USD"
+  )
+
+
+
+
+```
+
+# Question 5 (6 points)
+
+Discuss the learnings and insights in IR valuation and risk management. You explanation must: + Tell me something valuable from a delta and gamma risk perspectives, and + Have a focus on Pay particular attention to real world bond markets versus textbook examples.
+
+Delta measures the sensitivity of a bond or portfolio of bonds' price to small changes in yield. In textbook explanations, delta is assumed to have a linear relationship between price and yield, but in the real world, this assumption is less helpful for larger yield movements because the price to yield relationship is convex. This is where gamma is important, gamma measures the rate at which delta changes as yields fluctuate. If gamma is high, delta is unstable, which means that hedging strategies that are based solely on delta become ineffective as interest rates shift.
+
+In our portfolio, we are dollar-neutral but not risk-neutral. While the value of our positions sums to zero, we are exposed to risk due to the different maturities and convexities of the bonds. Long-term bonds have a more extreme convexity profile. Our portfolio’s delta flips from long to short \~ 4.75% YTM because as yields rise, the short 30-year bond, having the highest convexity, dominates the overall risk profile. Meanwhile, the shorter-term bonds (2-year and 10-year) lose influence more quickly. Making gamma an essential factor in our P&L attribution analysis.
+
+Hedging purely based on dollar value and/or delta exposes the portfolio to second-order risks, which can lead to significant P&L attribution errors during non-parallel changes in the yield curve. When looking for real-world examples, I found that the LTCM collapse in 1998 was a good example of how a theoretically neutral strategy can dissolve when gamma exposure is ignored. They bet on convergence trades in fixed income, believing that bond spreads would narrow over time. While they were dollar-neutral and duration-neutral, they had significant basis risk and tail risk, meaning they were short gamma with respect to spread widening, making them vulnerable to changing market conditions. The Asian/Russian crises of 1997-98 caused yields to fall while swap yields and off-the-run yields did not fall as much. The difference moved against them massively, and they ended up with a \$4 billion loss in weeks; with around \$1.6 billion due to the swap spread widening.
+
+Managing risk purely through duration (delta) is insufficient and incorporating convexity (gamma) helps ensure that a portfolio remains stable during market shifts. It is important as a risk manager to incorporate other tools such as swaps which are typically used for adjusting directional delta exposure, bond futures that provide liquidity for managing rate risk, and options (swaptions) that are effective for hedging gamma risk but can be expensive in volatile environments.
+
+The key takeaway I got from this project is that simply being dollar-neutral does not mean being risk-neutral. While delta explains first-order price changes, gamma determines how those price sensitivities evolve, making it one of the most crucial considerations in portfolio risk management, especially when dealing with differing convexity profiles like the one we analyzed.
+
+In regards to Vega, "Speed", and higher order derivatives. Vega risk is essentially zero in a straight bond portfolio because the cash flows are fixed with no volatility parameter affecting their value like an option has. However, in bonds with embedded options, such as callable bonds or MBS, Vega risk can arise. For bonds, gamma changes gradually as a bond ages or yields move. This is why third-order effects like "Speed" (the rate of change of gamma) are extremely small relative to Delta and Gamma.

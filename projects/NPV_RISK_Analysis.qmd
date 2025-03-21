@@ -1,0 +1,1116 @@
+---
+title: "A Desicion Towards Independence (NPV@RISK)"
+author: "Aftikhar Mominzada, Austin Kaduk, Shinto Kai"
+format: 
+  html:
+    mainfont: Times New Roman
+    self-contained: true
+    #page-layout: custom
+    grid:
+      sidebar-width: 50px
+      body-width: 1400px
+      margin-width: 50px
+    code-fold: false
+execute: 
+  echo: false
+CSS: styles.css
+fontsize: 12pt
+---
+
+```{r, setup, include = FALSE}
+knitr::opts_chunk$set(echo = F,warning = F,message = F, fig.width = 4, fig.height = 3,fig.align = "center",tidy = FALSE, strip.white = TRUE)
+
+library(moments)
+library(RTL)
+library(plotly)
+library(tidyverse)
+library(knitr)
+library(gt)
+library(kableExtra)
+```
+
+```{r, setup_params}
+
+#"Remember that the upgrader only operates when economically beneficial (spread > variable cost)" may be a potential lapse of information in the provided question for the NPV function where the defined "minimum operating threshold was 15$", we placed it to variable cost and since we are paying a fixed cost regardless of operating, It was an assumption that we would run the model at zero economic profit(sim >= variable cost)
+
+params <- list(
+  # Project parameters
+  initCAPEX = -2000,          # $2 billion initial investment
+  varCost = 11,               # Variable cost per barrel
+  fixedCost = -110,            # Annual fixed costs ($110M)
+  capacity = 100000,          # Daily processing capacity
+  days_per_month = 30.5,        # Average days per month
+  freq = 1/12,                # Monthly cash flows
+  endValue = 400,             # Terminal value in $M
+  T2M = 20,                   # Project lifetime in years
+  X = 11,                     # Minimum operating threshold               
+  Ti = 5,                     # Time for expansion option (year 5)
+  Ci = 25,                    # Spread threshold for expansion
+  expandCAPEX = -800,         # Expansion CAPEX in $M
+  expandCapacity = 0.4,       # 40% capacity increase
+  
+  # Simulation parameters
+  nsims = 500,               # Number of simulations
+  nsims_analysis = 500,       # Number of simulations for analysis (for speed)
+  nsims_sensitivity = 100,     # Number of simulations for sensitivity analysis
+  seed = 567                  # Random seed to ensure reproducibility
+)
+
+# Additional derived parameters
+params$monthly_fixedCost <- params$fixedCost/12  # Convert annual to monthly
+```
+
+## **Cold Lake Synthetic Crude Upgrader Project Analysis**
+
+```{r, historical_trends,warning = FALSE, message = FALSE}
+
+
+fizdiffs <- RTL::fizdiffs
+
+
+# Calculating CL-SYN Spread
+data <- fizdiffs %>%
+  select(date, WCS.HDY, CL.EDM, SYN.EDM) %>%
+  mutate(CL_SYN = SYN.EDM - (WCS.HDY + CL.EDM),
+         date = floor_date(date, "month")) %>%
+  group_by(date) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE)) %>%
+  na.omit()
+
+# Calculate summary statistics
+spread_stats <- data.frame(
+  Statistic = c("Mean", "Standard Deviation", "Minimum", "Maximum"),
+  Value = c(mean(data$CL_SYN), sd(data$CL_SYN), min(data$CL_SYN), max(data$CL_SYN))
+)
+
+
+# Compute summary statistics for CL_SYN
+mean_val <- mean(data$CL_SYN, na.rm = TRUE)
+median_val <- median(data$CL_SYN, na.rm = TRUE)
+sd_val <- sd(data$CL_SYN, na.rm = TRUE)
+
+# p1: Time series plot with trend line and statistical annotations
+p1 <- ggplot(data, aes(x = date, y = CL_SYN)) +
+  geom_line(color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Historical CL-SYN Spread", 
+       x = "Date", 
+       y = "Spread ($/spread)") +
+  annotate("text", 
+           x = min(data$date) + (max(data$date) - min(data$date)) * 0.05, 
+           y = max(data$CL_SYN, na.rm = TRUE), 
+           label = paste0("Mean = ", round(mean_val, 2), "\n",
+                          "Median = ", round(median_val, 2), "\n",
+                          "SD = ", round(sd_val, 2)),
+           hjust = 0, 
+           vjust = 1,
+           size = 3,
+           color = "black")
+
+
+mean_val <- mean(data$CL_SYN, na.rm = TRUE)
+median_val <- median(data$CL_SYN, na.rm = TRUE)
+skew_val <- skewness(data$CL_SYN, na.rm = TRUE)
+
+# Create histogram with density overlay
+p2 <- ggplot(data, aes(x = CL_SYN)) +
+  # Histogram in density scale
+  geom_histogram(aes(y = ..density..), bins = 50, fill = "skyblue", color = "black", alpha = 0.7) +
+  # Overlay density curve
+  geom_density(color = "blue", size = 1.2, adjust = 1) +
+  # Vertical lines for mean and median
+  geom_vline(xintercept = mean_val, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = median_val, color = "green", linetype = "dotted", size = 1) +
+  # Annotations for mean and median
+  annotate("text", x = mean_val, y = Inf, 
+           label = paste("Mean =", round(mean_val, 2)), 
+           vjust = -0.5, color = "red", size = 4) +
+  annotate("text", x = median_val, y = Inf, 
+           label = paste("Median =", round(median_val, 2)), 
+           vjust = -1.5, color = "green", size = 4) +
+  # Annotation for skewness
+  annotate("text", 
+           x = Inf, y = Inf, 
+           label = paste("Skewness =", round(skew_val, 2)), 
+           hjust = 1.1, vjust = 2, 
+           color = "purple", size = 5) +
+  labs(title = "Histogram of CL-SYN Spread with Density and Skewness",
+       x = "Spread ($/spread)", y = "Density") +
+  theme_minimal()
+
+
+
+```
+
+::::: grid
+::: g-col-6
+```{r}
+p1
+```
+:::
+
+::: g-col-6
+```{r}
+p2
+```
+:::
+:::::
+
+## **Historical Trend & Distribution Analysis**
+
+In November 2018, U.S. oil prices plunged below \$50 per barrel, falling over 30% since October due to rising supply and fears of weakening demand. President Donald Trump praised Saudi Arabia for keeping prices low, while concerns grew over U.S. shale oversupply, OPEC production uncertainty, and geopolitical tensions. This market instability is reflected in the CL-SYN spread, which shows increased volatility during this period, highlighting the impact of global supply-demand shifts on regional crude pricing. ([CNN](https://www.cnn.com/2018/11/21/investing/oil-prices-trump-saudi-arabia/index.html))
+
+The 2021–2023 global energy crisis was driven by post-pandemic supply shortages, coal trade disputes (China-Australia), climate-related hydropower declines, and geopolitical tensions like Russia’s invasion of Ukraine, which led to sanctions and disrupted oil and gas supplies. OPEC+ further tightened markets with production cuts in October 2022, intensifying price volatility and global energy shortages. This aligns with the CL-SYN spread surge in 2022, where prices spiked above \$20/barrel, reflecting the market’s reaction to these supply constraints and geopolitical disruptions. ([Wikipedia](https://en.wikipedia.org/wiki/Global_energy_crisis_%282021%E2%80%932023%29))
+
+The CL-SYN spread distribution is right-skewed, with most values between CAD 10-15 per spread in barrels. With a skewness of 0.63 illustrating that majority of the historical observation has been towards the lower end of the spread. It means that majority of the time spread changes within lower end. Reflecting a typical premium for synthetic crude, this aligns with the observed mean of \$16.47 per barrel, and extreme positives (up to CAD 35) align with major global events, such as the 2018 oil price crash, the 2020 COVID-19 collapse, and the 2021-2023 energy crisis, showing how external shocks drive volatility in the spread we are trying to capture.
+
+Overall, the CL-SYN spread shows signs of mean reversion, despite extreme deviations during global crises. Suggesting that while short-term shocks impact the spread, it tends to revert towards a stable range over time. Based on this analysis, we came to the conclusion to fit an Ornstein-Uhlenbeck Mean-reversion with Jumps model to effectively evaluate the value of our project decision.
+
+## **Simulated Spread**
+
+```{r, OUJ_model}
+
+
+
+fitOUJ <- function(spread, dt = 1/12) {
+  spread <- as.numeric(spread)
+  n <- length(spread)
+
+  # Step 1: Fit OU Model First (Ignoring Jumps)
+  X_t <- spread[1:(n-1)]
+  X_next <- spread[2:n]
+  reg <- lm(X_next ~ X_t)
+  alpha_hat <- coef(reg)[1]
+  beta_hat <- coef(reg)[2]
+  sigma_eps <- sd(residuals(reg))
+
+  # Convert to OU parameters
+  theta <- - (1/dt) * log(beta_hat)
+  mu <- alpha_hat / (1 - beta_hat)
+  sigma <- sqrt(sigma_eps^2 * 2 * theta / (1 - exp(-2 * theta * dt)))
+
+  # Compute half-life
+  halfLife <- log(2) / theta
+
+ # Step 2: Identify and Remove Jumps Before Estimating sigma
+  residuals <- residuals(reg)
+  threshold <- quantile(abs(residuals), 0.96)
+  jump_idx <- which(abs(residuals) > threshold)
+  num_jumps <- length(jump_idx)  
+
+  filtered_residuals <- residuals[-jump_idx]  # Remove jumps for sigma estimation
+
+  # Step 3: Estimate sigma using filtered residuals (only continuous diffusion)
+  sigma_filtered <- sd(filtered_residuals)  
+  sigma <- sqrt(2 * theta * sigma_filtered^2 / (1 - exp(-2 * theta * dt)))
+
+  # Step 4: Estimate Jump Parameters Using Identified Jumps
+  if (num_jumps > 0) {
+    jump_avesize <- mean(abs(residuals[jump_idx]))
+    jump_stdv <- sd(abs(residuals[jump_idx]))
+    jump_prob <- num_jumps / length(residuals)
+  } else {
+    jump_avesize <- 0
+    jump_stdv <- 0
+    jump_prob <- 0
+  }
+
+  # Return Clean Output
+  return(tibble(
+    theta = theta,
+    mu = mu,
+    sigma = sigma,
+    halfLife = halfLife,
+    jump_prob = jump_prob,
+    jump_avesize = jump_avesize,
+    jump_stdv = jump_stdv
+  ))
+}
+
+
+
+estimators <- fitOUJ(data$CL_SYN, dt = 1/12)
+kable(estimators)
+```
+
+```{r, simulation}
+library(plotly)
+
+set.seed(params$seed)
+
+simulation <- RTL::simOUJ(
+  nsims = params$nsims, 
+  S0 = data$CL_SYN[1], 
+  mu = estimators$mu, 
+  theta = estimators$theta, 
+  sigma = estimators$sigma, 
+  jump_prob = estimators$jump_prob, 
+  jump_avesize = abs(estimators$jump_avesize), 
+  jump_stdv = estimators$jump_stdv, 
+  T2M = params$T2M, 
+  dt = params$freq
+)
+
+sim_long <- simulation %>%
+  pivot_longer(cols = -t, names_to = "Simulation", values_to = "Value")
+
+
+simm01 <- simulation %>%  
+  select(t, sim1, sim2, sim3, sim4) %>% filter(t <= 5) %>% 
+  pivot_longer(cols = -t, names_to = "Simulation", values_to = "Value") %>% 
+  ggplot(aes(x = t, y = Value, group = Simulation, color = Simulation)) +
+  geom_line(alpha = 1, size = 0.5) +
+  labs(title = "Few samples from Simulation",
+       x = "T (Years)",
+       y = "Spread ($/Barrel)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+
+
+simss <- ggplot(sim_long, aes(x = t, y = Value, group = Simulation, color = Simulation)) +
+  geom_line(alpha = 1, size = 0.3) +  
+  labs(
+    title = "Simulated CL-SYN Spread",
+    x = "T (Years)",
+    y = "Spread ($/Barrel)"
+  ) +
+  theme_minimal(base_size = 20) +  
+  theme(
+    axis.title = element_text(size = 12),  
+    axis.text = element_text(size = 12),  
+    plot.title = element_text(size = 12, hjust = 0.5),  
+    legend.position = "none"
+  )
+
+```
+
+::::: grid
+::: g-col-6
+```{r, graph_sample_simulation, fig.width=8, fig.height=6}
+simm01
+```
+:::
+
+::: g-col-6
+```{r, graph_Actual_simulation_5000, fig.width=8, fig.height=6}
+simss
+```
+:::
+:::::
+
+### Justification of choice of parameters
+
+**Mu (Long-Run Mean):** Our historical data exhibits a mean spread of 16.47, while our model estimates 17.34, showing a clear consistency with the observed data. This suggests our model effectively captures the central tendency of the spread.
+
+**Theta (Mean-Reversion Speed):** With a moderate theta of 1.54, the spread reverts to its mean approximately every 1.5 years. This reflects a realistic pace of reversion, balancing short-term fluctuations with long-term stability.
+
+**Sigma (Volatility):** The estimated volatility of 9.53 suggests that while fluctuations occur, they are within a controlled range, capturing the moderate yet dynamic nature of the spread.
+
+**Jump Probability & Size:** The model detects jumps occurring approximately 4.9% of the time. The average jump size is 9.49 dollars, aligning with observed market shocks, and the estimated jump standard deviation of 1.61 captures variability in jump magnitudes.
+
+**Half-Life:** The spread takes approximately 0.45 years to close half the gap between its current level and the long-term mean. This estimation aligns well with market behavior, reinforcing the model’s ability to reflect real-world reversion dynamics.
+
+Overall, our Ornstein-Uhlenbeck with Jumps model appears to capture the spread's mean-reverting nature while allowing for occasional significant deviations. The spread operates within a band of approximately -\$8 to 42\$/barrel, showing expected stochastic behavior with jumps, yet maintaining a stable long-term range, allowing our model to effectively account for uncertainty within the markets.
+
+## **NPV\@Risk Analysis**
+
+```{r, NPV_function, include = FALSE}
+
+npv_upgrader <- function(
+  initCAPEX = params$initCAPEX,
+  varCost = params$varCost,
+  fixedCost = params$monthly_fixedCost,
+  capacity = params$capacity,
+  days_per_month = params$days_per_month,
+  freq = params$freq,
+  endValue = params$endValue,
+  T2M = params$T2M,
+  disc.factors = RTL::usSwapCurves,
+  simC = simulation[, 2] %>% dplyr::pull(.),  # First simulation path
+  X = params$X,
+  Ti = params$Ti,
+  Ci = params$Ci,
+  expandCAPEX = params$expandCAPEX,
+  expandCapacity = params$expandCapacity
+) {
+  # Calculate base parameters
+  base_volume <- capacity * days_per_month
+  expanded_volume <- base_volume * (1 + expandCapacity)
+  n_periods <- length(seq(from = 0, to = T2M, by = freq))
+  
+  # Creating output dataframe
+  out <- tibble(
+    t = seq(from = 0, to = T2M, by = freq),
+    sim = head(simC, n_periods),  # Ensuring length match
+    cf = 0,
+    volume = base_volume,
+    operating = FALSE
+  )
+  
+  # Determining expansion decision
+  Ti_idx <- which.min(abs(out$t - Ti))  # Find nearest time index
+  invest <- out$sim[Ti_idx] >= Ci # Apply expansion capacity if investment made
+  
+  # Calculating cash flows
+  #if we expanded and are operating, we use expanded volume
+  #if we did not expand but are operating, we use base volume
+  out <- out %>%
+    mutate(
+      operating =  sim >= X, #Operating upgrader only if spread > variable cost
+      volume = case_when(
+        !operating ~ 0, #if the upgrader is not operating, volume is zero
+        t > Ti & invest ~ expanded_volume, 
+        TRUE ~ base_volume),
+      
+      # Calculate monthly cash flows
+      #We Converted our revenues to millions to match setup parameters
+      #Accounted for fixed costs even when not operating
+      cf = case_when(
+        operating ~ ((sim - varCost) * volume)/1e6 + fixedCost, 
+        TRUE ~ fixedCost  
+      ),
+      
+      # Add initial CAPEX and terminal value
+      cf = replace(cf, t == 0, initCAPEX),
+      cf = replace(cf, t == T2M, cf[t == T2M] + endValue),
+      
+      # Add expansion CAPEX at decision point
+      cf = ifelse(near(t, Ti) & invest, cf + expandCAPEX, cf),
+      
+      # Calculate discount factors and PV
+      discountFactor = spline(
+        x = disc.factors$times,
+        y = disc.factors$discounts, 
+        xout = t
+      )$y,
+      pv = cf * discountFactor
+    )
+  
+  return(list(out = out, npv = sum(out$pv, na.rm = TRUE)))
+}
+
+npv_upgrader()
+
+
+```
+
+```{r, different_NPV_functions, include = FALSE}
+npv_upgrader_without_option <- function(
+  initCAPEX = params$initCAPEX,
+  varCost = params$varCost,
+  fixedCost = params$monthly_fixedCost,
+  capacity = params$capacity,
+  days_per_month = params$days_per_month,
+  freq = params$freq,
+  endValue = params$endValue,
+  T2M = params$T2M,
+  disc.factors = RTL::usSwapCurves,
+  simC = simulation[, 2] %>% dplyr::pull(.),  # First simulation path
+  X = params$X
+) {
+  # Calculate base parameters
+  base_volume <- capacity * days_per_month
+  n_periods <- length(seq(from = 0, to = T2M, by = freq))
+  
+  # Creating output dataframe
+  out <- tibble(
+    t = seq(from = 0, to = T2M, by = freq),
+    sim = head(simC, n_periods),  # Ensuring length match
+    cf = 0,
+    volume = base_volume,
+    operating = FALSE
+  )
+  
+  # Cash Flow Calculations (NO EXPANSION CONSIDERED)
+  out <- out %>%
+    mutate(
+      operating = sim >= X, # Operating upgrader only if spread > variable cost
+      volume = ifelse(!operating, 0, base_volume),  # Only base volume used
+      
+      # Calculate monthly cash flows
+      # Convert revenues to millions to match setup parameters
+      cf = case_when(
+        operating ~ ((sim - varCost) * volume) / 1e6 + fixedCost, 
+        TRUE ~ fixedCost  
+      ),
+      
+      # Add initial CAPEX and terminal value
+      cf = replace(cf, t == 0, initCAPEX),
+      cf = replace(cf, t == T2M, cf[t == T2M] + endValue),
+      
+      # Calculate discount factors and PV
+      discountFactor = spline(
+        x = disc.factors$times,
+        y = disc.factors$discounts, 
+        xout = t
+      )$y,
+      pv = cf * discountFactor
+    )
+  
+  return(list(out = out, npv = sum(out$pv, na.rm = TRUE)))
+}
+
+npv_upgrader_without_option()
+
+npv_upgrader_always_operating <- function(
+  initCAPEX = params$initCAPEX,
+  varCost = params$varCost,
+  fixedCost = params$monthly_fixedCost,
+  capacity = params$capacity,
+  days_per_month = params$days_per_month,
+  freq = params$freq,
+  endValue = params$endValue,
+  T2M = params$T2M,
+  disc.factors = RTL::usSwapCurves,
+  simC = simulation[, 2] %>% dplyr::pull(.)
+) {
+  # Calculate base parameters
+  base_volume <- capacity * days_per_month
+  n_periods <- length(seq(from = 0, to = T2M, by = freq))
+
+  # Creating output dataframe
+  out <- tibble(
+    t = seq(from = 0, to = T2M, by = freq),
+    sim = head(simC, n_periods),  # Ensuring length match
+    volume = base_volume,
+    cf = 0
+  )
+
+  # **Operating at all times regardless of spread level**
+  out <- out %>%
+    mutate(
+      # **Upgrader is always running → No shutdown when below threshold**
+      revenue = (sim - varCost) * volume / 1e6, # Revenue (converted to millions)
+      cf = revenue + fixedCost,  # Include fixed costs always
+      
+      # Add initial CAPEX and terminal value
+      cf = replace(cf, t == 0, initCAPEX),
+      cf = replace(cf, t == T2M, cf[t == T2M] + endValue),
+      
+      # Compute discount factors and present value
+      discountFactor = spline(
+        x = disc.factors$times,
+        y = disc.factors$discounts, 
+        xout = t
+      )$y,
+      pv = cf * discountFactor
+    )
+
+  return(list(out = out, npv = sum(out$pv, na.rm = TRUE)))
+}
+
+npv_upgrader_always_operating()
+
+```
+
+```{r, discount factor}
+
+# Set today's date
+current_date <- as.Date("2025-03-20")
+
+# Use the table from usSwapCurves
+swap_table <- RTL::usSwapCurves$table
+
+# Ensure the date column is in Date format
+swap_table <- swap_table %>% 
+  mutate(date = as.Date(date))
+
+# Floor each date to the first day of its month
+swap_table <- swap_table %>% 
+  mutate(
+    year_month = floor_date(date, unit = "month"),
+    current_month = floor_date(current_date, unit = "month")
+  )
+
+# Calculate the number of months between each date's month and the current month
+# Then, convert that into a fraction of a year
+swap_table <- swap_table %>% 
+  mutate(
+    month_diff = interval(current_month, year_month) %/% months(1),
+    time_year = month_diff / 12  # time in fraction of a year
+  )
+
+# Filter out dates that are before the current month
+swap_table <- swap_table %>% filter(month_diff >= 0)
+
+# Remove duplicate entries for the same month (keeping the first occurrence)
+swap_table_unique <- swap_table %>% 
+  group_by(year_month) %>% 
+  slice(1) %>% 
+  ungroup()
+
+# Order by month_diff to maintain the time sequence
+swap_table_unique <- swap_table_unique %>% arrange(month_diff)
+
+# Compute the discount factor using the continuous compounding formula:
+# discount = exp(-zeroRate * time_year)
+swap_table_unique <- swap_table_unique %>% 
+  mutate(discount = exp(-zeroRates * time_year))
+
+# Create the list with 'times' (in fraction of a year) and 'discounts'
+disc_factors_list <- list(
+  times = swap_table_unique$time_year,
+  discounts = swap_table_unique$discount
+)
+
+```
+
+```{r, NPVatRisk_function_Applying_the_function_to_simulation}
+
+
+
+sims <- as.list(as.data.frame(simulation[, -1])) # Excluding time column
+
+#disc_factors_list <- list(
+#  times = RTL::disc_factors_list$times,
+#  discounts = RTL::disc_factors_list$discounts
+#)
+
+disc.factors <- purrr::map(1:ncol(simulation[, -1]), ~disc_factors_list)
+
+NPVatRisk <- tibble(
+  initCAPEX = params$initCAPEX,
+  varCost = params$varCost,
+  fixedCost = params$monthly_fixedCost,
+  capacity = params$capacity,
+  days_per_month = params$days_per_month,
+  freq = params$freq,
+  endValue = params$endValue,
+  T2M = params$T2M,
+  X = params$X,
+  Ti = params$Ti,
+  Ci = params$Ci,
+  expandCAPEX = params$expandCAPEX,
+  expandCapacity = params$expandCapacity,
+  disc.factors = disc.factors,
+  simC = sims
+) %>%
+  mutate(
+    npv = purrr::pmap(
+      list(
+        initCAPEX = initCAPEX,
+        varCost = varCost,
+        fixedCost = fixedCost,
+        capacity = capacity,
+        days_per_month = days_per_month,
+        freq = freq,
+        endValue = endValue,
+        T2M = T2M,
+        disc.factors = disc.factors,
+        X = X,
+        Ti = Ti,
+        Ci = Ci,
+        expandCAPEX = expandCAPEX,
+        expandCapacity = expandCapacity,
+        simC = simC
+      ),
+      .f = npv_upgrader
+    ),
+    npv_without = purrr::pmap(
+      list(
+        initCAPEX = initCAPEX,
+        varCost = varCost,
+        fixedCost = fixedCost,
+        capacity = capacity,
+        days_per_month = days_per_month,
+        freq = freq,
+        endValue = endValue,
+        T2M = T2M,
+        disc.factors = disc.factors,
+        X = X,
+        simC = simC
+      ),
+      .f = npv_upgrader_without_option
+    ),
+    npv_always_running = purrr::pmap(
+      list(
+        initCAPEX = initCAPEX,
+        varCost = varCost,
+        fixedCost = fixedCost,
+        capacity = capacity,
+        days_per_month = days_per_month, 
+        freq = freq,
+        endValue = endValue,
+        T2M = T2M,
+        disc.factors = disc.factors,
+        simC = simC
+      ),
+      .f = npv_upgrader_always_operating
+    ),
+    npv.df = purrr::map(npv, "out"), #Cash flows
+    npv = as.numeric(purrr::map(npv, "npv")), # NPV values
+    npv.ret = npv / mean(npv) - 1, #Compute relative NPV return metric
+    
+    npv_wo_df = purrr::map(npv_without, "out"),
+    npv_wo = as.numeric(purrr::map(npv_without, "npv")),
+    
+    npv_always_df = purrr::map(npv_always_running, "out"),
+    npv_always = as.numeric(purrr::map(npv_always_running, "npv"))
+  )
+```
+
+```{r, NPV_distribution, warning = FALSE, message = FALSE}
+
+
+histPlot <- function(data = tibble(npv = rnorm(n = 1000)), title = "Simulated Distribution of Project NPV", xaxisTitle = "NPV ($M)") {
+  tmp <- data %>% 
+    plotly::plot_ly(x = ~npv, 
+                    type = "histogram", 
+                    histnorm = "probability density",
+                    opacity = 0.7) %>% 
+    layout(
+      yaxis = list(tickformat = ".1%", title = "Density"),
+      xaxis = list(title = xaxisTitle)
+    )
+  
+  # Calculate normal distribution curve
+  mean_data <- mean(data$npv)
+  sd_data <- sd(data$npv)
+  x_values <- seq(min(data$npv), max(data$npv), length.out = 100)
+  y_values <- dnorm(x_values, mean = mean_data, sd = sd_data)
+  
+  tmp <- tmp %>% 
+    plotly::add_trace(x = x_values, y = y_values, type = "scatter", mode = "lines", 
+                      line = list(color = "red")) %>%
+    layout(showlegend = FALSE, title = title)
+  
+  return(tmp)
+}
+
+# Generate NPV distribution plot
+histPlot(NPVatRisk)
+
+
+```
+
+```{r, exercise_plot, fig.width=10, fig.height=6}
+# Extract exercise decisions at time Ti
+exercise_plot_data <- NPVatRisk %>%
+  unnest(npv.df) %>%
+  filter(t == params$Ti) %>%
+  mutate(exercise = ifelse(sim >= params$Ci, "Exercise", "No Exercise"))
+
+# Count how many exercised vs. not
+exercise_summary <- exercise_plot_data %>%
+  count(exercise)
+
+
+exercisePlot <- function(data = exercise_summary, title = "Total Decisions to Exercise") {
+  plot_ly(
+    data = data,
+    x = ~exercise, 
+    y = ~n, 
+    type = "bar", 
+    marker = list(color = c("blue", "orange"))  # Colors for categories
+  ) %>%
+    layout(
+      title = title,
+      xaxis = list(title = "Decision"),
+      yaxis = list(title = "Number of Simulations")
+    )
+}
+
+# Generate exercise decision plot
+
+
+
+```
+
+```{r, risk_metrics}
+expected_npv <- mean(NPVatRisk$npv, na.rm = TRUE)
+std_dev_npv <- sd(NPVatRisk$npv, na.rm = TRUE)
+VaR_95 <- quantile(NPVatRisk$npv, probs = 0.05, na.rm = TRUE)
+prob_negative_npv <- mean(NPVatRisk$npv < 0, na.rm = TRUE)
+
+risk_metrics <- tibble(
+  Metric = c("Expected NPV ($M)", "Standard Deviation ($M)", "VaR (95%) ($M)", "Probability of Negative NPV (%)"),
+  Value = c(expected_npv, std_dev_npv, VaR_95, prob_negative_npv)
+)
+
+riskMit <- risk_metrics %>% gt() %>%
+  fmt_number(
+    columns = Value,
+    decimals = 2,
+    use_seps = TRUE,
+  ) %>%
+  fmt_percent(
+    columns = Value,
+    decimals = 2,
+    rows = 4
+  ) %>%
+  tab_header(
+    title = "NPV Risk Metrics",
+    subtitle = "Monte Carlo Simulation Results"
+  ) %>%
+  cols_label(
+    Metric = "Risk Metric",
+    Value = "Value"
+  )
+```
+
+::::: grid
+::: g-col-6
+```{r, fig.width=7, fig.height=7}
+riskMit
+```
+:::
+
+::: g-col-6
+```{r, fig.width=9, fig.height=3}
+exercisePlot(exercise_summary)
+```
+:::
+:::::
+
+### **Sensitivity Analysis**
+
+```{r}
+
+
+varCost_values <- seq(0, 13, by = 1)
+sensitivity_results <- tibble(varCost = varCost_values) %>%
+  mutate(
+    npv_distribution = purrr::map(varCost, function(varCost_value) {
+      map_dbl(1:params$nsims_sensitivity,function(col_index) {
+        sim_path <- simulation[[col_index]]
+        result <- npv_upgrader(varCost = varCost_value, simC = sim_path)
+        as.numeric(result$npv)
+      })
+    }),
+    expected_npv = purrr::map_dbl(npv_distribution, mean, na.rm = TRUE),
+    var_95 = purrr::map_dbl(npv_distribution, quantile, probs = 0.05, na.rm = TRUE)
+  )
+
+# Plot Expected NPV and NPV at 95% Risk
+plot_VC_S <- ggplot(sensitivity_results, aes(x = varCost)) +
+  geom_line(aes(y = expected_npv, color = "Expected NPV"), size = 1) +
+  geom_line(aes(y = var_95, color = "VaR 95%"), size = 1, linetype = "dashed") +
+  geom_point(aes(y = expected_npv, color = "Expected NPV"), size = 2) +
+  geom_point(aes(y = var_95, color = "VaR 95%"), size = 2) +
+  labs(
+    title = "Sensitivity Analysis: Variable Cost Impact on NPV",
+    x = "Variable Cost ($ per barrel)",
+    y = "Net Present Value (NPV, $M)"
+  ) +
+  scale_color_manual(values = c("Expected NPV" = "blue", "VaR 95%" = "red")) +
+  theme_minimal()
+
+
+
+
+
+X_values <- seq(10, 20, by = 1)  
+
+sensitivity_X_results <- tibble(X = X_values) %>%
+  mutate(
+    npv_distribution = purrr::map(X, function(X_value) {
+      purrr::map_dbl(1:params$nsims_sensitivity, function(col_index) {
+        sim_path <- simulation[[col_index]]
+        result <- npv_upgrader(X = X_value, simC = sim_path)
+        as.numeric(result$npv)
+      })
+    }),
+    expected_npv = purrr::map_dbl(npv_distribution, mean, na.rm = TRUE),
+    var_95 = purrr::map_dbl(npv_distribution, quantile, probs = 0.05, na.rm = TRUE)
+  )
+plotVC_02 <- ggplot(sensitivity_X_results, aes(x = X)) +
+  geom_line(aes(y = expected_npv, color = "Expected NPV"), size = 1) +
+  geom_line(aes(y = var_95, color = "VaR 95%"), size = 1, linetype = "dashed") +
+  geom_point(aes(y = expected_npv, color = "Expected NPV"), size = 2) +
+  geom_point(aes(y = var_95, color = "VaR 95%"), size = 2) +
+  labs(
+    title = "Sensitivity Analysis: Minimum Operating Threshold (X) Impact on NPV",
+    x = "Minimum Operating Threshold (X) ($/Spread)",
+    y = "Net Present Value (NPV, $M)"
+  ) +
+  scale_color_manual(values = c("Expected NPV" = "blue", "VaR 95%" = "red")) +
+  theme_minimal()
+
+```
+
+With 500 simulations for analysis, we get an expected (average) mean of \$42 million. When increasing the simulation to 5000 the expected NPV decreased to -\$47 million. With more simulations, the simulation distribution becomes more skewed.
+
+```{r, sensitivity expantion treshold and minimum operating thres}
+# Define a range of Ci values to test (e.g., from 20 to 30)
+Ci_values <- seq(10, 35, by = 2)
+# 
+# # Run the sensitivity analysis over the range of Ci values
+sensitivity_Ci_results <- tibble(Ci = Ci_values) %>%
+  mutate(
+    npv_distribution = purrr::map(Ci, function(Ci_value) {
+      # Loop over each simulation path (assuming simulation is a dataframe with time in column 1)
+      purrr::map_dbl(1:params$nsims_sensitivity, function(col_index) {
+        sim_path <- simulation[[col_index]]
+        result <- npv_upgrader(Ci = Ci_value, simC = sim_path)
+        as.numeric(result$npv)
+      })
+    }),
+    expected_npv = purrr::map_dbl(npv_distribution, mean, na.rm = TRUE),
+    var_95 = purrr::map_dbl(npv_distribution, quantile, probs = 0.05, na.rm = TRUE)
+  )
+
+# Compute expansion rate (probability of simC[Ti] >= Ci)
+sensitivity_Ci_results <- sensitivity_Ci_results %>%
+  mutate(
+    expansion_rate = purrr::map_dbl(
+      Ci,
+      ~ mean(purrr::map_lgl(
+        1:params$nsims_sensitivity,
+        function(col_index) {
+          sim_path <- simulation[[col_index]]  # Get simulation path
+          Ti_idx <- which.min(abs(seq(0, params$T2M, by = params$freq) - params$Ti))
+          sim_path[Ti_idx] >= .x  # Check if spread at Ti meets expansion threshold
+        }
+      ))
+    )
+  )
+
+
+
+# Calculate scaling factor to align expansion rate (0-1) with NPV range
+coeff <- max(sensitivity_Ci_results$expected_npv) - min(sensitivity_Ci_results$expected_npv)
+
+# Plot with dual axes
+plotCi <- ggplot(sensitivity_Ci_results, aes(x = Ci)) +
+  # Expected NPV (left axis)
+  geom_line(aes(y = expected_npv, color = "Expected NPV"), size = 1) +
+  geom_point(aes(y = expected_npv, color = "Expected NPV"), size = 2) +
+  
+  # Expansion Rate (right axis, scaled)
+  geom_line(aes(y = expansion_rate * coeff + min(expected_npv), 
+                color = "Expansion Rate"), 
+            size = 1, linetype = "dashed") +
+  geom_point(aes(y = expansion_rate * coeff + min(expected_npv), 
+                 color = "Expansion Rate"), 
+             size = 2) +
+  
+  # Axis definitions
+  scale_y_continuous(
+    name = "Expected NPV ($M)",
+    sec.axis = sec_axis(
+      ~ (. - min(sensitivity_Ci_results$expected_npv)) / coeff,
+      name = "Expansion Rate",
+      labels = scales::percent_format()
+    )
+  ) +
+  
+  # Styling
+  labs(
+    title = "Sensitivity Analysis: Expansion Threshold (Ci) Impact",
+    x = "Expansion Threshold (Ci) ($/Spread)",
+    color = "Metric"
+  ) +
+  scale_color_manual(
+    values = c("Expected NPV" = "blue", "Expansion Rate" = "#FF9900")
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    axis.title.y.right = element_text(color = "#FF9900"),
+    axis.text.y.right = element_text(color = "#FF9900")
+  )
+
+
+
+
+
+
+
+
+
+#################################################################################################################
+
+X_values <- seq(10, 20, by = 1)  
+
+sensitivity_X_results <- tibble(X = X_values) %>%
+  mutate(
+    npv_distribution = purrr::map(X, function(X_value) {
+      purrr::map_dbl(1:params$nsims_sensitivity, function(col_index) {
+        sim_path <- simulation[[col_index]]
+        result <- npv_upgrader(X = X_value, simC = sim_path)
+        as.numeric(result$npv)
+      })
+    }),
+    expected_npv = purrr::map_dbl(npv_distribution, mean, na.rm = TRUE),
+    var_95 = purrr::map_dbl(npv_distribution, quantile, probs = 0.05, na.rm = TRUE)
+  )
+# Compute probability of negative NPV for each X value
+sensitivity_X_results <- sensitivity_X_results %>%
+  mutate(
+    prob_negative = purrr::map_dbl(npv_distribution, ~ mean(.x < 0))
+  )
+
+# Calculate scaling factor for secondary axis (probabilities 0-1 to NPV range)
+coeff <- max(sensitivity_X_results$expected_npv) - min(sensitivity_X_results$expected_npv)
+
+# Create plot with dual axes
+plotVC_04 <- ggplot(sensitivity_X_results, aes(x = X)) +
+  # Expected NPV (left axis)
+  geom_line(aes(y = expected_npv, color = "Expected NPV"), size = 1) +
+  geom_point(aes(y = expected_npv, color = "Expected NPV"), size = 2) +
+  
+  # Probability of Negative NPV (right axis, scaled)
+  geom_line(aes(y = prob_negative * coeff + min(expected_npv), color = "Prob(NPV < 0)"), 
+            size = 1, linetype = "dashed") +
+  geom_point(aes(y = prob_negative * coeff + min(expected_npv), color = "Prob(NPV < 0)"), 
+             size = 2) +
+  
+  # Axis definitions
+  scale_y_continuous(
+    name = "Expected NPV ($M)",
+    sec.axis = sec_axis(
+      ~ (. - min(sensitivity_X_results$expected_npv)) / coeff,
+      name = "Probability of Negative NPV",
+      labels = scales::percent_format()
+    )
+  ) +
+  
+  # Styling
+  labs(
+    title = "Sensitivity Analysis: Minimum Operating Threshold (X) Impact",
+    x = "Minimum Operating Threshold (X) ($/Spread)",
+    color = "Metric"
+  ) +
+  scale_color_manual(
+    values = c("Expected NPV" = "blue", "Prob(NPV < 0)" = "red")
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    axis.title.y.right = element_text(color = "red"),
+    axis.text.y.right = element_text(color = "red")
+  )+ coord_cartesian(clip = "off")
+
+
+```
+
+::::: grid
+::: g-col-6
+```{r, fig.width=8, fig.height=6}
+plotVC_04
+```
+:::
+
+::: g-col-6
+```{r, fig.width=8, fig.height=6}
+plotCi
+```
+:::
+:::::
+
+From our sensitivity analysis, we observe that the minimum operating threshold for operating cost should be 11 dollars per barrel (CL_SYN spread), because that is where the profit is maximized or expected NPV is highest. Also, the probability of negative NPV is 100% at the minimum operating threshold of \$20 and lowest at \$11. This solidifies the target minimum operating threshold to be \$11.
+
+Higher expansion rate means expansion occurs more often in the simulations. Indicating that there is a positive relationship between higher expansion rate and higher NPV. However the sweet spot is around \$20 to \$25, that is, NPV changes the greatest and there is minimum change in expansion rate. A Higher expansion threshold lowers the expansion rate, and vice versa (as a result a lower NPV).
+
+Assuming that fixed costs and initial expenditure are predetermined or sunk cost we did not do a sensitivity analysis on them. It is with the assumption that the primary goal of a sensitivity analysis is to assess how changes in uncertain, variable factors—such as sales volume, selling price, or variable costs—affect the project's outcomes. Since fixed costs and initial expenditures are usually contractual or one-time outlays, they’re assumed to remain unchanged unless we explicitly want to test scenarios where these assumptions might vary.
+
+```{r Tornado_Chart, fig.width=10, fig.height=6, echo=FALSE}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Extract Actual NPV Impacts from Sensitivity Analysis
+baseline_npv <- mean(NPVatRisk$npv, na.rm = TRUE)  
+
+# Multi-parameter tornado chart for sensitivity analysis
+tornado_data <- tibble(
+  Parameter = c(
+    "Operating Threshold (X)", "Operating Threshold (X)",
+    "Expansion Threshold (Ci)", "Expansion Threshold (Ci)"
+  ),
+  Level = c("Low", "High", "Low", "High"),
+  Value = c(
+    min(sensitivity_X_results$expected_npv, na.rm = TRUE) - baseline_npv,
+    max(sensitivity_X_results$expected_npv, na.rm = TRUE) - baseline_npv,
+    min(sensitivity_Ci_results$expected_npv, na.rm = TRUE) - baseline_npv,
+    max(sensitivity_Ci_results$expected_npv, na.rm = TRUE) - baseline_npv
+  )
+) %>%
+  mutate(
+    Direction = ifelse(Value < 0, "Negative", "Positive"),
+    Parameter_Level = interaction(Parameter, Level, sep = " - ")  # Creates unique labels
+  )
+
+
+# Create Tornado Chart
+ggplot(tornado_data, aes(x = Parameter_Level, y = Value, fill = Direction)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  coord_flip() +  # Flip the chart to horizontal
+  scale_fill_manual(values = c("Negative" = "red", "Positive" = "green")) +
+  labs(
+    title = "Tornado Chart of Sensitivity Analysis",
+    subtitle = paste("Baseline NPV: $", round(baseline_npv, 2), "million"),
+    x = NULL,
+    y = "Difference from Baseline NPV ($ millions)",
+    fill = "Direction"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    plot.subtitle = element_text(size = 16),
+    axis.text.y = element_text(size = 14),
+    axis.text.x = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    plot.margin = margin(15, 15, 15, 15)  # Ensure proper spacing
+  ) +
+  scale_y_continuous(labels = scales::comma)
+
+
+```
+
+The tornado chart highlights that Operating Threshold (X) - Low has the most significant negative impact, driving NPV down by over \$1.5 billion, as running operations at an unprofitable threshold leads to major losses. Expansion Threshold (Ci) - Low also reduces NPV, indicating that premature expansion increases costs without guaranteeing returns. Conversely, Expansion Threshold (Ci) - High is the only factor that increases NPV, showing that a more conservative expansion strategy results in better financial outcomes. These insights reinforce that setting an optimal Operating Threshold (X) is critical, as poor calibration can lead to extreme downside risk, while strategic expansion decisions help maximize profitability.
+
+## **Strategic Recommendation**
+
+Based on our analysis, we recommend proceeding with the project. However, there are clear opportunities to enhance profitability by refining key constraints identified in our evaluation.
+
+Currently, the option to expand the upgrader is only available at t = 5, resembling a European call option. However, the existing expansion threshold of \$25/barrel creates a significant limitation on potential returns. To maximize value, we recommend lowering this threshold to approximately \$20/barrel, enabling optimal expansion and greater upside capture in favorable market conditions. This adjustment aligns with our NPV analysis and could significantly improve the project's financial outcome.
+
+```{r}
+mean_spread <- rep(estimators$mu, 241) #20 years * 12 months + 1 (t = 0)
+traditional_npv <- npv_upgrader(simC = mean_spread)$npv
+
+npv_methods <- dplyr::tibble(
+  Method = c("Traditional NPV", "NPV@Risk (Mean)"),
+  'NPV Value ($M)' = round(c(traditional_npv, mean(NPVatRisk$npv)), 2)
+)
+
+kable(npv_methods, caption = "Comparison of Traditional NPV vs. NPV@Risk",
+      align = "c") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+
+```
+
+The Traditional NPV approach yields a negative value of -\$55 million, suggesting that the project is not feasible under a rigid, static framework. In contrast, the NPV\@Risk approach, which incorporates flexibility and uncertainty, results in a positive expected NPV of \$42 million, demonstrating the significant value of adaptive decision-making. The differences between the two approaches highlight the clear limitations of a traditional NPV method, which fails to capture flexibility and changing market dynamics. While a traditional NPV approach can be served useful in stable, predictable environments (e.g regulated utilities), it struggles in more volatile markets (e.g commodities or energy), where price fluctuations and strategic adjustments play a more critical role. By incorporating NPV\@Risk and real options analysis, firms can account for uncertainty, adaptability, and decision-making flexibility, ultimately leading to a more realistic valuation of their projects and more clear insights on the risks that come with it.
+
+Beyond the limitations of the traditional NPV approach, our analysis further explores how different levels of flexibility impact project value.
+
+### **The value of operational flexibility and expansion**
+
+```{r}
+expected_npv <- mean(NPVatRisk$npv, na.rm = TRUE) 
+expected_npv_no_option <- mean(NPVatRisk$npv_wo, na.rm = TRUE)
+expected_npv_always_running <- mean(NPVatRisk$npv_always, na.rm = TRUE)
+
+option_value_full <- expected_npv - expected_npv_always_running
+option_value_expansion <- expected_npv - expected_npv_no_option
+option_value_shutdown <- expected_npv_no_option - expected_npv_always_running
+
+npv_summary <- dplyr::tibble(
+  Flexibility = c("Full Flexibility", "Expansion Only", "Shutdown Flexibility"),
+  'Expected NPV ($M)' = round(c(expected_npv,
+                   expected_npv_no_option,
+                   expected_npv_always_running), 2),
+  'Option Value ($M)' = round(c(option_value_full, option_value_expansion, option_value_shutdown), 2)
+)
+kable(npv_summary, caption = "Expected NPV and Option Value for different flexibility levels",
+      align = "c") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+The real options embedded in our NPV model highlight the substantial financial impact of managerial flexibility under uncertainty. Without any flexibility, where the project must always operate regardless of market conditions, the expected NPV is -\$205.53 million, reflecting the significant downside risk. Allowing only the option to shut down (but not expand) improves this outcome dramatically to \$8.10 million, demonstrating the importance of avoiding prolonged losses during unfavorable conditions. However, incorporating full flexibility—including both expansion and shutdown—further increases the expected NPV to \$42.15 million. This \$34.05 million difference represents the value of strategic adaptability, showcasing how proactive decision-making enhances project value.
+
+Much like how military leaders develop contingency plans for unpredictable battle conditions, this approach enables management to adjust operations dynamically in response to market fluctuations. Instead of committing to a rigid, predetermined strategy, the company can mitigate downside risk by suspending operations when necessary while capitalizing on growth opportunities through expansion. This ability to optimize operations in real-time ensures the project remains resilient across varying market conditions, ultimately maximizing long-term value.

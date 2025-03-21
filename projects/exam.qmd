@@ -1,0 +1,318 @@
+---
+title: "FIN-450"
+subtitle: "Midterm Exam"
+author: "Student :: Austin.Kaduk"
+date: "2024-10-30"
+format: 
+  html: 
+    embed-resources: true
+---
+
+```{=html}
+<style type="text/css"> body, td {font-size: 12px;} code.r{font-size: 10px;} pre {font-size: 12px} </style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, fig.width = 8,fig.height = 5)
+```
+
+## Questions
+
+### Q1. Use of API and Data Parsing. (5 points)
+
+Extract the following data from FRED from `2014-01-01` to `2024-08-01`.
+
+-   Unemployment Rate in Alaska.
+-   Unemployment Rate in District of Columbia.
+
+Perform the following:
+
+-   Return a **long data frame** named `unemployment` with columns `date`, `series` and `value`.
+-   Amend the series names to `AK` and `DC` using `tidyverse` functions.
+-   Using `plotly`, plot both time series on the same line chart. `ggplot2` converted to `plotly` is not acceptable.
+
+```{r}
+# your code here
+
+library(tidyverse)
+library(tidyquant)
+library(knitr)
+library(gt)
+
+country <- c("AKUR", "DCUR")
+
+unemployment <- country %>% tidyquant::tq_get(get = "economic.data",
+                    from = "2014-01-01",
+                    to = "2024-08-01") %>%
+  stats::na.omit()
+
+unemployment <- unemployment %>% 
+  dplyr::mutate(series = stringr::str_replace_all(symbol, c("AKUR" = "AK", 
+                                                            "DCUR" = "DC")),
+                value = price) %>%
+  dplyr::select(date, series, value) 
+
+unemployment %>% plotly::plot_ly(x = ~date, y = ~value, name = ~series, type = "scatter", mode = "lines")
+                
+    
+  
+
+```
+
+### Q2 Data Wrangling (15 points)
+
+#### A) Using the sp400 components dataset below: (5 pts)
+
+-   Return a dataframe that shows the `weight` of each `sector` in the S&P 400.
+-   Round the `weight` to 3 decimals.
+-   Sort the sector descending by weight.
+
+```{r, comment=""}
+# hint: the output of your code should return a dataframe looking like the output of this one
+example <- dplyr::tibble(sector = c("Information Technology","Consumer Discretionary","Utilities"),
+              weight = c(0.15,0.10,0.05))
+
+kable(example)
+```
+
+```{r}
+library(RTLedu)
+sp <- sp400_desc
+# your code here
+
+weight <- sp %>% 
+  dplyr::select(sector, weight) %>%
+  dplyr::mutate(weight = round(weight, 3)) %>%
+  dplyr::arrange(desc(weight))
+weight
+```
+
+#### B) What is the total weight of the 15 companies with the largest weights in the sp400? (5 pts)
+
+For example, if each of the 10 largest `weight` companies had a `weight` of 1%, it would be 10%.
+
+```{r}
+# your code here
+top15 <- sp %>%
+  select(company, weight) %>%
+  dplyr::arrange(desc(weight)) %>%
+  dplyr::slice(1:15) %>%
+  dplyr::mutate(answer = cumsum(weight))
+
+answer <- top15 %>% slice(15) %>% select(answer)
+gt(answer)
+
+
+```
+
+#### C) Searching (5 points)
+
+You want to extract companies with the following criteria:
+
+-   They are either in the Health Care **OR** Communication Services `sector`,
+-   **AND** they have a `weight` greater than 0.4%.
+
+Correct the code I wrote which is not working...
+
+```{r, eval = F}
+# leave this code as is and correct it in the next chunk
+sp400_desc %>% tidyr::select(sector == "Communication Services" AND sector == "Health Care" OR weight > 0.004)
+```
+
+```{r}
+# Your corrected code here
+corrected <- sp400_desc %>% dplyr::filter(sector == "Communicaiton Services" | sector == "Health Care", weight > 0.004)
+
+gt(corrected)
+```
+
+### Q3. Correlation (6 points)
+
+You just graduated in Finance and took a job as an investment adviser for a company specializing in the real estate sector. Your company runs advertising portraying the benefit of the diversification it provides at all times versus equity indices.
+
+You are skeptical.
+
+-   Use the following data set which represents prices of an ETF `RealEstate` and `sp400`.
+-   Use `log()` returns on for your analysis.
+
+```{r}
+cor <- RTLedu::correlation %>%
+  dplyr::group_by(series) %>%
+  mutate(log_return = log(value / dplyr::lag(value))) %>%
+  tidyr::drop_na(log_return)
+```
+
+#### A) Compute and plot a 60-day rolling correlation. (3 points)
+
+```{r}
+# your code here
+
+cor.roll <- cor %>%
+  dplyr::select(date, series, log_return) %>%
+  tidyr::pivot_wider(names_from = series, values_from = log_return) %>%
+  dplyr::mutate(cor60 = slider::pslide_dbl(
+    .l = list(RealEstate, sp400),
+    .f = ~ cor(.x, .y),
+    .before = 60,
+    .after = 0,
+    .complete = TRUE
+  )) %>%
+  tidyr::drop_na()
+
+cor.roll %>%
+  ggplot(aes(x = date, y = cor60)) +
+  geom_line(color = "blue") +
+  labs(title = "60-day Rolling Correlation", x = "", y = "")
+
+```
+
+#### B) Compute the AVERAGE of the ROLLING correlation in the following two periods and select the appropriate TRUE statement(s). (3 points)
+
+-   Pre COVID19: 2017-2019.
+-   Post COVID19: 2020-now.
+
+For full points, you must create a variable in your dataframe using `dplyr::mutate()` with the pre and post correlation periods (tidy workflow).
+
+```{r}
+# your code here
+roll_cor <- cor.roll %>%
+  dplyr::mutate(periods = dplyr::if_else(date < "2020-01-01", "Pre-COVID19", "Post-COVID19")) %>%
+  group_by(periods) %>%
+  dplyr::summarise(avg_roll_cor = mean(cor60))
+
+kable(roll_cor, digits = 3)
+```
+
+A)  Pre-COVID19 = 0.49, Post-COVID19 = 0.69
+B)  Pre-COVID19 = 0.52, Post-COVID19 = 0.69
+C)  Pre-COVID19 = 0.49, Post-COVID19 = 0.81
+D)  Pre-COVID19 = 0.52, Post-COVID19 = 0.81
+E)  Pre-COVID19 = 0.49, Post-COVID19 = 0.687 = 0.69
+
+your answer
+
+**A**
+
+### Q4 Seasonality (6 points)
+
+Using the `RTLedu::unemployment` data set:
+
+#### A) STL decomposition (4 points)
+
+In the code chunk below: Use the `feast::STL()` model and plot the results using `fabletools::components()`.
+
+Add a short paragraph telling me what you observe in the change over time in their seasonality patterns.
+
+From the chart we can see that the unemployment rates in each state seem to follow a similar trend in all aspects, with Alaska having a more subtle increase and decrease in rates throughout the years, we can also see that California has the most distinct increases and decreases over the years. Observing seasonality, we can see that Alaska has the most noticeable seasonality patterns throughout the years with an interesting decrease overtime, while California and New Jersey have had a very similar pattern of seasonality. Interestingly, California and New Jersey have had an increase in seasonaly patterns throughout the years. The STL decomposition shows the effects of economic changes throughout the years through analysis of the remainder, where there was a significant jump in the unemployment rate beginning 2020 (COVID-19).
+
+```{r}
+# your code here
+seas <- RTLedu::unemployment
+
+library(fabletools)
+library(feasts)
+library(tsibble)
+
+seas_tsi <- seas %>%
+  tsibble::as_tsibble(key = state, index = date) %>%
+  tsibble::index_by(freq = ~yearmonth(.)) %>%
+  tsibble::group_by_key() %>%
+  dplyr::summarise(
+    rate = mean(rate),
+    .groups = "keep"
+  ) %>%
+  stats::na.omit()
+
+stl<- seas_tsi %>%
+  fabletools::model(feasts::STL(formula = rate ~ season(window = 13)))
+
+stl %>% fabletools::components() %>% autoplot()
+
+
+```
+
+#### B) Compute the Trend and Seasonality strength statistics. (2 points)
+
+```{r}
+# your code here
+
+str_stats <- seas_tsi %>%
+  fabletools::features(rate, feasts::feat_stl)
+kable(str_stats, digits = 3)
+```
+
+### Q5. Regression Analysis (8 points)
+
+#### A) Hedging: Perform a regression and select the TRUE statement(s) (4 points)
+
+This question will use the `RTLedu::reg3` data set where:
+
+-   `ICLN` is a clean energy ETF.
+
+-   `XLE` is the Energy industry ETF of the sp500 index.
+
+-   You own `ICLN` in your portfolio.
+
+-   Your are interested in understanding how `XLE` returns explain `ICLN` returns.
+
+-   No residuals or ACF tests are required for this question.
+
+```{r}
+reg1 <- RTLedu::reg3
+# your code here
+library(broom)
+
+fit <- stats::lm(ICLN ~ XLE, reg1)
+model_fit <- broom::tidy(fit)
+
+kable(model_fit, digits = 3)
+
+hedge_ratio <- cor(reg1$ICLN, reg1$XLE) * (sd(reg1$ICLN) / sd(reg1$XLE))
+
+
+
+
+```
+
+A)  The regression and beta (coefficient estimate) are significant.
+B)  The beta (coefficient estimate) is significant and the regression is not.
+C)  To hedge your thousand dollar investment in `ICLN`, you should sell approximately \$450 of `XLE` shares.
+D)  To hedge your thousand dollar investment in `ICLN`, you should sell approximately \$550 of `XLE` shares.
+
+your answer(s)
+
+**B, C**
+
+#### B) Regression Residuals (4 points)
+
+A work colleague has done the regression shown below.
+
+Her boss knows you have a Finance background and asking you for your critical opinion.
+
+Write a few bullet points summarizing your conclusions.
+
+-   The Coefficient X is significant and the model explains 76.31% of variability, however the residuals tell another story.
+-   We can see from the residuals vs fitted graph that there is a curved pattern, which shows clear non-linearity, meaning that the model might not fully capture the true relationship of the data, I would suggest a non-linear model, perhaps a cubic function of some sort.
+-   From the Normal Q-Q graph we can see that the residuals are not normally distributed at least near the tails of the residuals.
+-   There are present observations that may be influencing the model (82, 209, 20, 19), however this should be analyzed after transforming the model.
+-   From the Breusch-Pagan Test, we can see that heteroscedasticity is present
+
+```{r}
+library(ggfortify)
+reg <- lm(y ~ x,data = RTLedu::reg2)
+
+
+
+RTLedu::reg2 %>% ggplot(aes(x = RTLedu::reg2$x, y = RTLedu::reg2$y)) +
+  geom_point(alpha = 0.6, color = "blue") +
+  labs(title = "Scatterplot of our Data", x = "x", y = "y") +
+  theme_minimal()
+
+results <- summary(reg)
+model_results <- broom::tidy(results)
+kable(model_results, digits = 3)
+
+autoplot(reg, size =0.5)
+test_results <- lmtest::bgtest(fit) %>% broom::tidy()
+kable(test_results)
+```
