@@ -1,5 +1,5 @@
 ---
-title: "Projects"
+title: "Resume"
 ---
 
-Here are my current projects that I am working on:
+Here is my current resume
