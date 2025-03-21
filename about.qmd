@@ -6,8 +6,8 @@ page-layout: article
 
 Here is my current Resume:
 
-<iframe src="Resume.pdf" width="100%" height="600px">
+::: pdf-container
+<iframe src="assets/Resume.pdf"></iframe>
+:::
 
-</iframe>
-
-📄 [**Download My Resume (PDF)**](Resume.pdf)
+📄 [**Download My Resume (PDF)**](assets/Resume.pdf)
