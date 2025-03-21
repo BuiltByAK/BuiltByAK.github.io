@@ -2,22 +2,8 @@
 title: "Practical IR Portfolio Sensitivities"
 subtitle: "Individual Project"
 date: "`r Sys.Date()`"
-author: "Philippe Cote"
-format: 
-  html:
-    theme: cyborg
-    embed-resources: true
-    page-layout: full
-    toc: true
-    toc-location: left
-    grid: 
-      margin-width: 200px
-      body-width: 1000px
-    css: style.css
-    resource: 
-      - "*.js"
-      - "*.mp3"
-editor: source
+author: "Austin Kaduk"
+format: html
 ---
 
 ```{r setup, include=FALSE}
@@ -61,7 +47,7 @@ You may use the `RTL::bond()` pricing function.
     -   A line showing the delta approximation price
     -   A line showing the actual price
 
-```{r}
+```{r, warning=FALSE}
 
 last_buis_day <- as.Date("2025-01-31")
 series = c("DGS2", "DGS10", "DGS30")

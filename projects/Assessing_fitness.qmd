@@ -18,6 +18,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE)
 
 library(tidyverse)
 library(RTLedu)
+library(knitr)
 
 #Manipulating our data:
 #Selecting Variables we want to work with in this project
@@ -238,7 +239,8 @@ stationarity_results <- data.frame(
   KP_Level_p_value = round(levelst$p.value, 4),
   KP_trend_p_value = round(trendst$p.value, 4)
 )
-print(stationarity_results, row.names = FALSE)
+
+kable(stationarity_results)
 ```
 
 Since our **Jarque-Bera** test results show a low p-value for all variables except for Average Stride Length, we must reject the null that our data is normally distributed, and **assume it is not normal**. However, after analysis of our Correlation Matrix, we are making the decision to not use the following variables in our regression analysis: Average Stride Length, Moving Time, Max Heart Rate, Best Pace, and Maximum Run Cadence.
@@ -827,20 +829,22 @@ for (i in 1:length(independent)) {
   out[i, 1] <- glue::glue("{dependent} ~ {betas}")
 }
 
-out %>%
+table <- out %>%
   dplyr::mutate(output = purrr::pmap(.l = list(formula = model, data = list(fdf_final3)), .f = stats::lm),
                 res = purrr::map(.x = output, .f = broom::glance)) %>%
   tidyr::unnest(res) %>%
-  dplyr::select(model,output,r.squared,adj.r.squared, p.value) %>%
+  dplyr::select(model,r.squared,adj.r.squared, p.value) %>%
   dplyr::mutate_if(is.numeric, round, 3)
+
+kable(table)
 
 ```
 
 We can see that all of our models have significance, however the final model including all of our variables have the highest explanation of $R^2_{adjusted}$ we can take a closer look at our final model to see if there is the presence of multicolinearity, if our terms are significant, and if our Residuals follow the assumptions of a liner regression.
 
 ```{r summary_model_4}
-broom::tidy(fit4)
-
+summ <- broom::tidy(fit4)
+kable(summ)
 ```
 
 Taking a look at the P-values of our predictors we can see that they all hold statistical significance, meaning they all contribute meaningfully to predicting Aerobic TE. The key Findings of this model suggest that increasing distance, heart rate, and elevation gain (total ascent) during training can enhance Aerobic training effects, while having slower paces can reduce it.
@@ -848,7 +852,7 @@ Taking a look at the P-values of our predictors we can see that they all hold st
 ```{r}
 vif_results <- car::vif(fit4)
 tidy_vif <- tibble::enframe(vif_results, name = "Predictors", value = "VIF")
-tidy_vif
+kable(tidy_vif)
 ```
 
 Judging from our VIF results we can see that our model seems to have very low multicollinearity; these values lay within the boundary of 1 \< VIF \< 5, which is within the typical acceptable limits and are generally not problematic.

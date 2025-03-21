@@ -3,17 +3,17 @@ title: "A Desicion Towards Independence (NPV@RISK)"
 author: "Aftikhar Mominzada, Austin Kaduk, Shinto Kai"
 format: 
   html:
-    mainfont: Times New Roman
     self-contained: true
+    toc: true
+    page-layout: article
     #page-layout: custom
     grid:
-      sidebar-width: 50px
-      body-width: 1400px
+      sidebar-width: 500px
+      body-width: 1200px
       margin-width: 50px
     code-fold: false
 execute: 
   echo: false
-CSS: styles.css
 fontsize: 12pt
 ---
 
