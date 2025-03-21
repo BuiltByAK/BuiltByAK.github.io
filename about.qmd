@@ -1,5 +1,13 @@
 ---
 title: "Resume"
+format: html
+page-layout: article
 ---
 
-Here is my current resume
+Here is my current Resume:
+
+<iframe src="Resume.pdf" width="100%" height="600px">
+
+</iframe>
+
+📄 [**Download My Resume (PDF)**](Resume.pdf)
