@@ -9,7 +9,9 @@ website:
       - href: index.qmd
         text: Home
       - text: "Projects"
-        file: projects/projects.qmd
+        href: projects/projects.qmd
+      - text: "About"
+        href: about.qmd
       
 
 format:
